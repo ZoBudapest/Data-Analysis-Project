@@ -1,0 +1,265 @@
+---
+title: "Home Assigment for Sz.P"
+author: "Zoltan Aszalos"
+date: "March 9, 2017"
+output:
+  html_document: default
+  word_document: default
+---
+
+#Data Science for Business Project
+
+###Zoltan Aszalos
+### 20 March 2017
+
+
+#Determinants of no-show at medical appointments
+
+## Key information on the data set
+
+*The database is a publicly accessible databse on Kaggle: 
+https://www.kaggle.com/joniarroba/noshowappointments
+
+This data set includes patient information related to 300,000 patient visits to different medical services in 2014 and 2015. 
+
+The key question of this research is to discuss the determinants of no-show for medical appointments based on the variables of the dataset. 
+
+Basic data filtering was the very first task in this project. 
+Only complete cases were accepted, people with negative age filtered out, and two columns without adequate specification deleted.
+
+```{r, message=FALSE, warning=FALSE, echo=FALSE}
+
+library(data.table)
+library(randomForest)
+library(ggplot2)
+library(dplyr)
+library(pander)
+
+setwd("C:/Users/Aszalós Zoltán/Documents/3. MSc in Analytics")
+dat <- read.csv("No-show-Issue-Data-Set.csv")
+
+
+dat$Scholarship <- NULL
+dat$AwaitingTime <- NULL
+dat <- subset(dat, Age >= 0)
+
+```
+
+With such transformation the new dimensions of the data table are: `r dim(dat)`
+
+## Exploratory data analysis
+
+The key variable of the data set:
+*Show-up status: if the patient showed-up or did not show up at the appointment. - We consider this as the dependent variable and analyse how this variable depends on all the other determinants: 
+
+###Variables on patients and appointments
+*Gender
+*Age
+*Date of appointment registration 
+*Date of appointment
+*Day of the Week
+*Sms reminders sent to patients before the appointment
+
+###Variables on medical condition
+*Hipertension
+*Diabetes
+*Handcap
+*Alcoholism
+*Smoking
+*Tubercolosis
+
+A summary table of this file shows the basic information on each variable: 
+
+```{r, message=FALSE, warning=FALSE, echo=FALSE}
+
+dat$Gender<-as.factor(dat$Gender)
+dat$DayOfTheWeek<-as.factor(dat$DayOfTheWeek)
+dat$AppointmentRegistration<-as.factor(dat$AppointmentRegistration)
+dat$ApointmentData<-as.factor(dat$ApointmentData)
+dat$Status<-as.factor(dat$Status)
+pander(summary(dat))
+
+```
+
+Based on this table, some key information on each variable: 
+
+###Variables on patients and appointments
+
+*Gender Status: The the third of patients were females (200,499) compared to males (99,495)
+*Age: the range of the age of patients was between 0 and 113, and on average were 37.81 years
+*Date of appointment registration and appointment  
+*Sms reminders sent to patients before the appointment: 57% percentage of patients receiving sms reminder:
+*Status: The status of the patient: if the patient showed-up or did not show up at the appointment. 
+
+
+###Variables on medical condition
+
+*Hipertension: percentage of patients with hipertension 21% - this is the mostfrequently identified medical condition among patients
+*Diabetes: percentage of diabetes patients is 7% - this is the second most frequently identified medical condition amonng patients
+*Alcoolism: percentage of alcoholic patients is 2.5%5.2
+*Smoking: percentage of smoking patients: 5.2%
+*Tubercolosis: this disease is basically non-existent in this patient group. 
+
+
+## Exploratory data analysis with visualisation
+
+
+### Age distribution of patients 
+The age distribution of the patients by gender shows an outstanding number of children below 1 and another peak for the age group 40-60.
+
+```{r, message=FALSE, warning=FALSE, echo=FALSE}
+ggplot(dat, aes(Age, fill = Gender)) + geom_bar() + ggtitle("Number of patients by age group, by gender in the cohort") + xlab("Age of patients")
+```
+
+
+### Hipertension and diabetes among patients 
+
+Hipertension ad Diabetes are the most widespread medical conditions among patients
+
+```{r, message=FALSE, warning=FALSE, echo=FALSE}
+ggplot(dat, aes(Age, fill = HiperTension)) + geom_bar() + ggtitle("HiperTension among patients") + xlab("Age of patients")
+```
+
+```{r, message=FALSE, warning=FALSE, echo=FALSE}
+ggplot(dat, aes(Age, fill = Diabetes)) + geom_bar() + ggtitle("Diabetes among patients") + xlab("Age of patients")
+```
+
+## The age distribution of the patients by the status (Show up or No-Show) 
+
+The chart shows that in each age group there is a significant percentage of patients who do not show up for the medical appointment.
+
+```{r, message=FALSE, warning=FALSE, echo=FALSE}
+ggplot(dat, aes(Age, fill = Status)) + geom_bar() + ggtitle("Number of patients by age group in the cohort, by Show-up") + xlab("Age of patients")
+```
+
+## The day of the week by the status (Show up or No-Show) 
+
+The chart shows that there is a peak of visits in on Wednesdays, on Fridays the number of patients visits are  lower, and there are few patient visits on Saturdays and none of Sundays. On each day, there is a significant number of no-shows. The ratio 
+
+```{r, message=FALSE, warning=FALSE, echo=FALSE}
+
+reorder_size <- function(x) {
+  factor(x, levels = names(sort(table(x))))
+}
+ggplot(dat, aes(reorder_size(DayOfTheWeek), fill = Status)) + geom_bar() + ggtitle("Number of patient visits by the day of week, by show-up status") + xlab("Number of patients")
+```
+
+## Show-up and time span betweeen registration & appointment date 
+
+This plot shows the relationship between the show-up status and the length of time between the date of appointment registration and the date of the appointment. For this, two extra columns are inserted: (1) to calculate the difference between the time-span between these two dates, (2) to convert show up status into binary.  
+
+```{r, message=FALSE, warning=FALSE, echo=FALSE}
+dat$tdif = as.numeric(as.Date(substr(dat$ApointmentData,1,10))-as.Date(substr(dat$AppointmentRegistration,1,10)))
+dat$bin = ifelse(dat$Status=='Show-Up', 1, 0) 
+ggplot(dat, aes(tdif, bin)) + geom_smooth() + ggtitle("Time between registration and appointment & average show up status") + xlab("Time span between regitration and appointment") + ylab("Average of show ups (1: Show-Up 0: No-Show)")
+```
+
+## Age and show-up
+
+The below chart shows well reliability of patients by age group. Patients between 20 and 25 are the most likely to miss the appointment, while patients around 70 are the most likely to shop-up for an appointment. 
+
+```{r, message=FALSE, warning=FALSE, echo=FALSE}
+ggplot(dat, aes(Age, bin)) + geom_smooth() + ggtitle("Age groups & average show-up status") + xlab("Age of patients") + ylab("Average of  show ups (1: Show-Up 0: No-Show)")
+```
+
+
+# Part II. Machine learning
+
+We shall analyse the following factors for predicting Show-Up/No-Show: 
+
+*Gender
+*Age
+*Difference between the date of appointment registration and date of appointment  
+*Sms reminders sent to patients before the appointment
+
+And the medical conditions:
+*Hipertension
+*Diabetes
+*Handcap
+*Alcoholism
+*Smoking
+*Tubercolosis
+
+For this analysis, gender data was converted to binary data, Weekdays were converted to numbers (1-7)
+
+## Random forest
+
+The confusion matrix and the OOB estimate of error rate is the following for the random forest model: 
+
+```{r, message=FALSE, warning=FALSE, echo=FALSE}
+
+options(stringsAsFactors=F)
+
+wd = dat[,-c(3,4,6)]
+wd$Gender = ifelse(wd$Gender=='M',1,2)
+
+wd$DayOfTheWeek[which(wd$DayOfTheWeek=="Monday")] = 1
+wd$DayOfTheWeek[which(wd$DayOfTheWeek=="Tuesday")] = 2
+wd$DayOfTheWeek[which(wd$DayOfTheWeek=="Wednesday")] = 3
+wd$DayOfTheWeek[which(wd$DayOfTheWeek=="Thursday")] = 4
+wd$DayOfTheWeek[which(wd$DayOfTheWeek=="Friday")] = 5
+wd$DayOfTheWeek[which(wd$DayOfTheWeek=="Saturday")] = 6
+wd$DayOfTheWeek[which(wd$DayOfTheWeek=="Sunday")] = 7
+wd$DayOfTheWeek = as.numeric(wd$DayOfTheWeek)
+
+wd$bin = factor(wd$bin)
+wd = wd[which(complete.cases(wd)),]
+
+
+set.seed(123)
+
+library(randomForest)
+md = randomForest(bin ~ ., data = wd, ntree = 100)
+pander(md)
+
+
+```
+
+
+The random forest analysis shows the importance of the different factors influencing the No-Show of patients. In fact, in addition to the age, the time difference between the date of the appointment and the registration is the most decisive factor. The model shows that the different health conditions have little impact on the show-up status. 
+
+```{r, message=FALSE, warning=FALSE, echo=FALSE}
+pander(md$importance)
+```
+
+## GBM
+The next model is the Gradient Boosting Model. 
+
+Here the data set is divided first into a sample set, which is 60% of the data set, and then thre rest is divided in 50-50%. With h20, the below confusion matrix is the result. 
+
+```{r, message=FALSE, warning=FALSE, echo=FALSE}
+library(h2o)
+df = wd
+set.seed(1234)
+N1 = nrow(df)
+vt = sample(1:N1,0.6*N1)
+d_training = df[vt,]
+d_vt = df[-vt,]
+N2 = nrow(d_vt)
+t = sample(1:N2,0.5*N2)
+d_validation = d_vt[t,]
+d_testing = d_vt[-t,]
+
+library(h2o)
+h2o.init()
+h2o.removeAll()
+
+dset_train = as.h2o(d_training)  
+dset_valid = as.h2o(d_validation)  
+dset_test = as.h2o(d_testing)
+
+colnames(dset_train)[-4]
+
+GBM = h2o.gbm(nfolds=5,x=colnames(dset_train)[-4],y="bin",training_frame = dset_train, validation_frame=dset_valid, ntree=100, seed=226)
+h2o.auc(GBM)
+pred = h2o.performance(GBM, newdata=dset_test)
+
+pander(h2o.confusionMatrix(pred))
+```
+
+The table below shows the importance ofthe factors. This model also emphasizes the importance of the difference between the date of registration and the date of the actual appointment. This is the most important determinant of no-show by patients.  The model shows, similarly to the random forest model that the different health conditions have little impact on the show-up status. 
+
+```{r, message=FALSE, warning=FALSE, echo=FALSE}
+pander(h2o.varimp(GBM))
+
+```
